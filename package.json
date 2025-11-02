@@ -4,12 +4,15 @@
   "description": "authn and authz in TS",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon",
+    "dev": "npm run build && nodemon dist/server.js",
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "jest",
     "lint": "eslint src --ext .ts"
   },
+  "_moduleAliases": {
+  "@": "dist"
+},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/shaunak-kanadam/ts-authn-authz.git"
@@ -38,6 +41,7 @@
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "jose": "^6.1.0",
+    "module-alias": "^2.2.3",
     "morgan": "^1.10.1",
     "otplib": "^12.0.1",
     "ts-node": "^10.9.2",
