@@ -11,7 +11,10 @@
     "lint": "eslint src --ext .ts"
   },
   "_moduleAliases": {
-  "@": "dist"
+    "@": "dist"
+  },
+  "prisma": {
+  "seed": "tsx prisma/seed.ts"
 },
   "repository": {
     "type": "git",
@@ -32,6 +35,7 @@
   "dependencies": {
     "@prisma/client": "^6.18.0",
     "argon2": "^0.44.0",
+    "bcryptjs": "^3.0.2",
     "compression": "^1.8.1",
     "cookie": "^1.0.2",
     "cookie-parser": "^1.4.7",
@@ -51,6 +55,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",

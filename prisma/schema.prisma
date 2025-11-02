@@ -1,78 +1,281 @@
-// prisma/schema.prisma
+// --------------------------------------------------------------
+// JMeter SaaS Platform — Prisma Schema (v5.1)
+// --------------------------------------------------------------
+// - Dynamic RBAC (roles & permissions)
+// - AuthN/AuthZ with Session + RefreshToken
+// - Multi-tenant orgs with internal/external users
+// - Full audit logging & API key security
+// --------------------------------------------------------------
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"           // Change to "postgresql" if using Postgres
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id             String    @id @default(cuid())
-  email          String    @unique
-  passwordHash   String
-  emailVerified  Boolean   @default(false)
-  totpEnabled    Boolean   @default(false)
-  totpSecretEnc  String?
-  sessions       Session[]
-  refreshTokens  RefreshToken[]
-  memberships    Membership[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-}
+// --------------------------------------------------------------
+// ENUMS
+// --------------------------------------------------------------
 
-model Organization {
-  id          String        @id @default(cuid())
-  name        String
-  createdAt   DateTime      @default(now())
-  memberships Membership[]
-  projects    Project[]
-}
-
-model Membership {
-  id        String   @id @default(cuid())
-  userId    String
-  orgId     String
-  role      Role
-  user      User         @relation(fields: [userId], references: [id])
-  org       Organization @relation(fields: [orgId], references: [id])
-  @@unique([userId, orgId])
-}
-
-model Session {
-  id         String   @id @default(cuid())
-  userId     String
-  userAgent  String?
-  ip         String?
-  revokedAt  DateTime?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
-}
-
-model RefreshToken {
-  id         String   @id @default(cuid())
-  userId     String
-  sessionId  String
-  tokenHash  String   @unique
-  expiresAt  DateTime
-  revokedAt  DateTime?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
-}
-
-model Project {
-  id          String   @id @default(cuid())
-  name        String
-  orgId       String
-  createdAt   DateTime @default(now())
-  org         Organization @relation(fields: [orgId], references: [id])
-}
-
-enum Role {
-  ORG_OWNER
+enum MembershipRole {
+  OWNER
   ADMIN
   DEVELOPER
   VIEWER
+}
+
+enum InternalRole {
+  SUPERADMIN
+  PLATFORMADMIN
+  SUPPORT
+  FINANCE
+  DEVOPS
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  CREATE_ORG
+  UPDATE_ORG
+  INVITE_MEMBER
+  REMOVE_MEMBER
+  GENERATE_API_KEY
+  REVOKE_API_KEY
+}
+
+// --------------------------------------------------------------
+// DYNAMIC ROLES & PERMISSIONS
+// --------------------------------------------------------------
+
+model Permission {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  roles       RolePermission[]
+}
+
+model Role {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  description     String?
+  isInternal      Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([roleId, permissionId])
+}
+
+model UserRole {
+  id             String  @id @default(cuid())
+  userId         String?
+  internalUserId String?
+  roleId         String
+  orgId          String?
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  internalUser InternalUser? @relation(fields: [internalUserId], references: [id], onDelete: Cascade)
+  role         Role          @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([roleId])
+  @@index([userId])
+  @@index([internalUserId])
+  @@index([orgId])
+}
+
+// --------------------------------------------------------------
+// EXTERNAL USERS (CUSTOMERS)
+// --------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String
+  passwordHash String?
+  name         String?
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  memberships        OrganizationMembership[]
+  oauthAccounts      OAuthAccount[]
+  apiKeys            ApiKey[]
+  sessions           Session[]
+  refreshTokens      RefreshToken[]
+  auditLogs          AuditLog[]               @relation("UserAuditLogs")
+  userRoles          UserRole[]
+  ownedOrganizations Organization[]           @relation("OrgOwner")
+
+  @@unique([email, deletedAt])
+  @@index([email])
+}
+
+model InternalUser {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String?
+  name         String?
+  role         InternalRole @default(SUPPORT)
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  apiKeys       ApiKey[]
+  auditLogs     AuditLog[]     @relation("InternalAuditLogs")
+  userRoles     UserRole[]
+  sessions      Session[]      @relation("InternalUserSessions")
+  refreshTokens RefreshToken[] @relation("InternalUserRefreshTokens")
+
+  @@index([email])
+}
+
+// --------------------------------------------------------------
+// ORGANIZATIONS & MEMBERSHIPS
+// --------------------------------------------------------------
+
+model Organization {
+  id          String                   @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String?
+  owner       User?                    @relation("OrgOwner", fields: [ownerId], references: [id])
+  memberships OrganizationMembership[]
+  apiKeys     ApiKey[]
+  userRoles   UserRole[]
+  auditLogs   AuditLog[]
+  deletedAt   DateTime?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+}
+
+model OrganizationMembership {
+  id       String         @id @default(cuid())
+  userId   String
+  orgId    String
+  role     MembershipRole @default(VIEWER)
+  joinedAt DateTime       @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+  @@index([userId])
+}
+
+// --------------------------------------------------------------
+// AUTHENTICATION SUPPORT (OAuth + Sessions + Tokens)
+// --------------------------------------------------------------
+
+model OAuthAccount {
+  id                String @id @default(cuid())
+  provider          String
+  providerAccountId String
+  userId            String
+  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id             String    @id @default(cuid())
+  userId         String?
+  internalUserId String?
+  userAgent      String?
+  ip             String?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  user          User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  internalUser  InternalUser?  @relation("InternalUserSessions", fields: [internalUserId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@index([userId])
+  @@index([internalUserId])
+}
+
+model RefreshToken {
+  id             String    @id @default(cuid())
+  userId         String?
+  internalUserId String?
+  sessionId      String
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  internalUser InternalUser? @relation("InternalUserRefreshTokens", fields: [internalUserId], references: [id], onDelete: Cascade)
+  session      Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([internalUserId])
+  @@index([sessionId])
+}
+
+// --------------------------------------------------------------
+// SECURITY & API KEYS
+// --------------------------------------------------------------
+
+model ApiKey {
+  id             String    @id @default(cuid())
+  keyHash        String    @unique
+  label          String?
+  organizationId String?
+  userId         String?
+  internalUserId String?
+  createdAt      DateTime  @default(now())
+  revokedAt      DateTime?
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  internalUser InternalUser? @relation(fields: [internalUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([internalUserId])
+}
+
+// --------------------------------------------------------------
+// AUDIT LOGS
+// --------------------------------------------------------------
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  userId         String?
+  internalUserId String?
+  organizationId String?
+  action         AuditAction
+  entityType     String?
+  entityId       String?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime    @default(now())
+
+  user         User?         @relation("UserAuditLogs", fields: [userId], references: [id], onDelete: SetNull)
+  internalUser InternalUser? @relation("InternalAuditLogs", fields: [internalUserId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([internalUserId])
 }
