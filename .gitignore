@@ -1,0 +1,123 @@
+# =====================================
+# Node.js / TypeScript SaaS Backend
+# =====================================
+
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+.pnpm-debug.log*
+
+# Build output
+dist/
+build/
+coverage/
+.tmp/
+temp/
+.cache/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Prisma
+prisma/dev.db
+prisma/migrations/dev.db
+prisma/.env
+prisma/*.db-journal
+prisma/generated/
+
+# Logs
+logs/
+*.log
+*.log.*
+*.out
+*.pid
+*.seed
+*.gz
+.log/
+.log/**
+log/
+log/**
+pm2.log
+debug.log
+error.log
+
+# Testing
+coverage/
+.nyc_output/
+jest-html-reporters-*
+
+# IDE / Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+.docker/
+.dockerignore
+
+# Redis, cache, sessions
+redis-data/
+sessions/
+.cache/
+tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+
+# Security / Keys
+*.pem
+*.key
+*.crt
+*.csr
+*.pfx
+*.cer
+*.enc
+
+# Misc
+*.bak
+*.old
+*.orig
+*.rej
+*.swp
+*.swo
+*.zip
+*.tar.gz
+*.tgz
+
+# Local tooling
+.nodemonignore
+nodemon.json
+eslintcache/
+.prettiercache/
+.vscode/
+.editorconfig
+
+# CI/CD artifacts
+artifacts/
+release/
+coverage-final.json
+
+# Ignore local uploads or temp data
+uploads/
+temp/
+tmp/
+files/
+data/
