@@ -17,8 +17,10 @@ import { Router } from "express";
 import {
   loginController,
   logoutController,
+  registerController
 } from "../controllers/auth.controller";
 import { refreshController } from "../controllers/refresh.controller";
+import { verifyEmailController } from "../controllers/verify.controller";
 
 // -----------------------------------------------------------------------------
 // 🚏 Router Initialization
@@ -35,6 +37,10 @@ const router = Router();
  * @access Public
  */
 router.post("/login", loginController);
+
+router.post("/register", registerController);
+
+router.get("/verify-email", verifyEmailController);
 
 /**
  * @route POST /auth/logout
