@@ -194,4 +194,66 @@ export class AuthService {
     // 5️⃣ Return confirmation
     return { sub, type };
   }
+
+// ---------------------------------------------------------------------------
+// 🔁 REFRESH — Issue new access + refresh tokens
+// ---------------------------------------------------------------------------
+async refresh(refreshToken: string) {
+  if (!refreshToken) throw new Error("Missing refresh token");
+
+  // 1️⃣ Hash and find stored token
+  const crypto = await import("crypto");
+  const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+
+  const storedToken = await prisma.refreshToken.findUnique({
+    where: { tokenHash },
+    include: { session: true },
+  });
+
+  if (!storedToken || storedToken.revokedAt)
+    throw new Error("Invalid or revoked refresh token");
+
+  if (storedToken.expiresAt < new Date())
+    throw new Error("Refresh token expired");
+
+  const userType = storedToken.userId ? "external" : "internal";
+  const userId = storedToken.userId || storedToken.internalUserId;
+
+  // 2️⃣ Generate new access token
+  const accessToken = await this.tokenService.generateAccessToken({
+    sub: `${userType}:${userId}`,
+    type: userType,
+  });
+
+  // 3️⃣ Rotate refresh token for security
+  const newRefreshToken = await this.tokenService.generateRefreshToken(
+    userId!,
+    storedToken.sessionId,
+    userType
+  );
+
+  await prisma.refreshToken.update({
+    where: { id: storedToken.id },
+    data: { revokedAt: new Date() },
+  });
+
+  // 4️⃣ (Optional) Add audit logging
+  await prisma.auditLog.create({
+    data: {
+      action: "TOKEN_REFRESH", // reuse LOGIN for token renewal
+      ipAddress: storedToken.session?.ip,
+      userAgent: storedToken.session?.userAgent,
+      userId: userType === "external" ? userId : null,
+      internalUserId: userType === "internal" ? userId : null,
+    },
+  });
+
+  // 5️⃣ Return new token pair
+  return {
+    accessToken,
+    refreshToken: newRefreshToken,
+  };
 }
+
+}
+

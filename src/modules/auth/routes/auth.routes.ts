@@ -18,6 +18,7 @@ import {
   loginController,
   logoutController,
 } from "../controllers/auth.controller";
+import { refreshController } from "../controllers/refresh.controller";
 
 // -----------------------------------------------------------------------------
 // 🚏 Router Initialization
@@ -41,6 +42,9 @@ router.post("/login", loginController);
  * @access Private (requires Bearer token)
  */
 router.post("/logout", logoutController);
+
+
+router.post("/refresh", refreshController); 
 
 // -----------------------------------------------------------------------------
 // 📦 Export Router
