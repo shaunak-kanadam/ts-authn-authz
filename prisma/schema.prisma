@@ -124,6 +124,7 @@ model User {
   auditLogs          AuditLog[]               @relation("UserAuditLogs")
   userRoles          UserRole[]
   ownedOrganizations Organization[]           @relation("OrgOwner")
+  passwordResetTokens PasswordResetToken[]
 
   @@unique([email, deletedAt])
   @@index([email])
@@ -146,6 +147,19 @@ model InternalUser {
   refreshTokens RefreshToken[] @relation("InternalUserRefreshTokens")
 
   @@index([email])
+}
+
+model PasswordResetToken {
+  id          String   @id @default(cuid())
+  userId      String
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // --------------------------------------------------------------

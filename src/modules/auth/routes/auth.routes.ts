@@ -20,6 +20,10 @@ import {
   registerController
 } from "../controllers/auth.controller";
 import { refreshController } from "../controllers/refresh.controller";
+import {
+  forgotPasswordController,
+  resetPasswordController,
+} from "../controllers/password.controller";
 import { verifyEmailController } from "../controllers/verify.controller";
 
 // -----------------------------------------------------------------------------
@@ -51,6 +55,10 @@ router.post("/logout", logoutController);
 
 
 router.post("/refresh", refreshController); 
+
+// 🔐 Password reset routes
+router.post("/forgot-password", forgotPasswordController);
+router.post("/reset-password", resetPasswordController);
 
 // -----------------------------------------------------------------------------
 // 📦 Export Router
