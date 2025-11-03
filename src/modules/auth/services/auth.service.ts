@@ -1,14 +1,30 @@
+/**
+ * @fileoverview
+ * Authentication service — handles user registration, login, and logout logic.
+ *
+ * Responsibilities:
+ * - Verify credentials and issue access + refresh tokens
+ * - Manage session lifecycle for both internal and external users
+ * - Record audit logs for login/logout events
+ *
+ * This is a pure business logic layer (no direct HTTP handling).
+ * It is consumed exclusively by the controller layer.
+ */
+
 import { prisma } from "@/lib/prisma";
 import { verifyPassword, hashPassword } from "../utils/hash";
 import { TokenService } from "./token.service";
 import { logger } from "@/lib/logger";
 
+// -----------------------------------------------------------------------------
+// 🧩 Service Class Definition
+// -----------------------------------------------------------------------------
 export class AuthService {
   private tokenService = new TokenService();
 
-  /**
-   * 🔐 User login (internal + external)
-   */
+  // ---------------------------------------------------------------------------
+  // 🔐 LOGIN — Handles both internal and external users
+  // ---------------------------------------------------------------------------
   async login(
     data: { email: string; password: string },
     userAgent?: string,
@@ -16,7 +32,7 @@ export class AuthService {
   ) {
     const { email, password } = data;
 
-    // 1️⃣ Try internal first, then external
+    // 1️⃣ Try to find internal or external user
     const internal = await prisma.internalUser.findUnique({ where: { email } });
     const external = !internal
       ? await prisma.user.findFirst({ where: { email, deletedAt: null } })
@@ -33,7 +49,7 @@ export class AuthService {
       throw new Error("Invalid email or password");
     }
 
-    // 2️⃣ Verify password
+    // 2️⃣ Verify password validity
     const account = internal || external;
     const valid = await verifyPassword(password, account!.passwordHash!);
     if (!valid) {
@@ -41,24 +57,15 @@ export class AuthService {
       throw new Error("Invalid email or password");
     }
 
-    // 3️⃣ Create session for both user types
-const session =
-  userType === "external"
-    ? await prisma.session.create({
-        data: {
-          userId: external!.id,
-          userAgent,
-          ip,
-        },
-      })
-    : await prisma.session.create({
-        data: {
-          internalUserId: internal!.id,
-          userAgent,
-          ip,
-        },
-      });
-
+    // 3️⃣ Create session for the correct user type
+    const session =
+      userType === "external"
+        ? await prisma.session.create({
+            data: { userId: external!.id, userAgent, ip },
+          })
+        : await prisma.session.create({
+            data: { internalUserId: internal!.id, userAgent, ip },
+          });
 
     // 4️⃣ Generate access + refresh tokens
     const subPrefix = userType === "internal" ? "internal:" : "user:";
@@ -76,12 +83,8 @@ const session =
       userType!
     );
 
-    // 5️⃣ Log + audit
-    logger.info("User logged in", {
-      email,
-      userType,
-      sessionId: session.id,
-    });
+    // 5️⃣ Log + audit event
+    logger.info("User logged in", { email, userType, sessionId: session.id });
 
     await prisma.auditLog.create({
       data: {
@@ -93,6 +96,7 @@ const session =
       },
     });
 
+    // 6️⃣ Return structured response
     return {
       userType,
       accessToken,
@@ -105,26 +109,30 @@ const session =
     };
   }
 
-  /**
-   * 🧾 Register new external user
-   */
+  // ---------------------------------------------------------------------------
+  // 🧾 REGISTER — Create new external user accounts
+  // ---------------------------------------------------------------------------
   async register(data: { email: string; password: string; name?: string }) {
     const { email, password, name } = data;
 
+    // 1️⃣ Check for existing user
     const existing = await prisma.user.findFirst({
       where: { email, deletedAt: null },
     });
-    if (existing) {
-      throw new Error("User already exists");
-    }
+    if (existing) throw new Error("User already exists");
 
+    // 2️⃣ Hash password securely
     const passwordHash = await hashPassword(password);
+
+    // 3️⃣ Create user record
     const newUser = await prisma.user.create({
       data: { email, passwordHash, name },
     });
 
+    // 4️⃣ Log event
     logger.info("User registered", { email });
 
+    // 5️⃣ Return created user info
     return {
       id: newUser.id,
       email: newUser.email,
@@ -132,21 +140,21 @@ const session =
     };
   }
 
-  /**
-   * 🚪 Logout — revoke refresh tokens and session
-   */
+  // ---------------------------------------------------------------------------
+  // 🚪 LOGOUT — Revoke session & refresh tokens
+  // ---------------------------------------------------------------------------
   async logout(accessToken: string) {
+    // 1️⃣ Verify token validity
     const payload = await this.tokenService.verifyAccessToken(accessToken);
     const sub = payload.sub as string;
     const type = (payload as any).type as "internal" | "external";
-
     if (!sub) throw new Error("Invalid access token");
 
     const id = sub.includes("internal:")
       ? sub.replace("internal:", "")
       : sub.replace("user:", "");
 
-    // 1️⃣ Find active session
+    // 2️⃣ Find active session
     const session = await prisma.session.findFirst({
       where:
         type === "external"
@@ -160,7 +168,7 @@ const session =
       return { sub, type, message: "No active session" };
     }
 
-    // 2️⃣ Revoke session + refresh tokens
+    // 3️⃣ Revoke session + refresh tokens
     await prisma.session.update({
       where: { id: session.id },
       data: { revokedAt: new Date() },
@@ -171,13 +179,8 @@ const session =
       data: { revokedAt: new Date() },
     });
 
-    // 3️⃣ Audit
-    logger.info("User logged out", {
-      id,
-      type,
-      sessionId: session.id,
-    });
-
+    // 4️⃣ Record audit log
+    logger.info("User logged out", { id, type, sessionId: session.id });
     await prisma.auditLog.create({
       data: {
         action: "LOGOUT",
@@ -188,6 +191,7 @@ const session =
       },
     });
 
+    // 5️⃣ Return confirmation
     return { sub, type };
   }
 }
